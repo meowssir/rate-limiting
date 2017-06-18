@@ -40,7 +40,7 @@ func main() {
 	close(requests)
 
 	// The actual throttle is defined by the tick time in ms as L/opcount.
-	// for ex; we have 2 operations and we are dividing them into 1s intervals -
+	// for ex; we have 2 operations and we are dividing each into some interval over 1s -
 	// then our throttle is 500ms..
 	throttle := time.Tick(time.Millisecond * time.Duration(1000/q.opcount))
 
