@@ -34,7 +34,7 @@ func main() {
 	fmt.Println(&q.docs)
 
 	requests := make(chan int, q.opcount)
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= q.opcount; i++ {
 		requests <- i
 	}
 	close(requests)
