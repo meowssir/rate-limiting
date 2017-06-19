@@ -20,6 +20,9 @@ func main() {
 	q.opcount = 2
 	q.docs = append(q.docs, bson.D{{"a", 0}}, bson.D{{"a", 1}})
 
+	// n is the rate of inserts we want per second
+	n := 2
+
 	// queuing constructor and limit the number of exec per second.
 	url := "ssp13g3l:27017"
 	session, err := mgo.Dial(url)
@@ -39,10 +42,9 @@ func main() {
 	}
 	close(requests)
 
-	// The actual throttle is defined by the tick time in ms as L/opcount.
-	// for ex; we have 2 operations and we are dividing each into some interval over 1s -
-	// then our throttle is 500ms..
-	throttle := time.Tick(time.Millisecond * time.Duration(1000/q.opcount))
+	// The actual throttle is defined by the tick time in ms as L/n where n is some int specified.
+	// in the case of n being 2, the throttle is then 500ms.
+	throttle := time.Tick(time.Millisecond * time.Duration(1000/n))
 
 	for req := range requests {
 		<-throttle // rate limit our inserts by blocking this channel.
