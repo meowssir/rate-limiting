@@ -11,6 +11,7 @@ import (
 )
 
 const (
+	minBSONSize = 4 + 1
 	MaxBSONSize = 16 * 1024 * 1024 // 16MB - maximum BSON document size
 )
 
@@ -18,21 +19,27 @@ func archiveReader(filename string) int32 {
 	r, _ := os.Open(filename)
 
 	b := make([]byte, 4)
-	r.Read(b)
-	fmt.Println(b)
-	r.Seek(4, 1)
-	r.Read(b)
-	size := int32(
-		(uint32(b[0]) << 0) |
-			(uint32(b[1]) << 8) |
-			(uint32(b[2]) << 16) |
-			(uint32(b[3]) << 24),
-	)
 
-	buf := make([]byte, MaxBSONSize)
-	io.ReadFull(r, buf[:1])
-	fmt.Println(buf)
-	return size
+	for {
+		// skip 0x8199e26d and read size
+		r.Seek(4, 0)
+		r.Read(b)
+		fmt.Println(b)
+		size := int32(
+			(uint32(b[0]) << 0) |
+				(uint32(b[1]) << 8) |
+				(uint32(b[2]) << 16) |
+				(uint32(b[3]) << 24),
+		)
+		r.Seek(4, 0)
+
+		buf := make([]byte, size)
+		io.ReadFull(r, buf)
+		out := bson.D{}
+		bson.Unmarshal(buf, &out)
+		fmt.Println(out)
+		r.Seek(4, 0)
+	}
 }
 
 func main() {
