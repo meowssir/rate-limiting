@@ -18,27 +18,24 @@ const (
 func archiveReader(filename string) int32 {
 	r, _ := os.Open(filename)
 
-	b := make([]byte, 4)
+	// skip 0x8199e26d
+	r.Seek(4, 0)
+	buf := make([]byte, MaxBSONSize)
 
 	for {
-		// skip 0x8199e26d and read size
-		r.Seek(4, 0)
-		r.Read(b)
-		fmt.Println(b)
+		// read size bytes
+		io.ReadFull(r, buf[0:4])
 		size := int32(
-			(uint32(b[0]) << 0) |
-				(uint32(b[1]) << 8) |
-				(uint32(b[2]) << 16) |
-				(uint32(b[3]) << 24),
+			(uint32(buf[0]) << 0) |
+				(uint32(buf[1]) << 8) |
+				(uint32(buf[2]) << 16) |
+				(uint32(buf[3]) << 24),
 		)
-		r.Seek(4, 0)
 
-		buf := make([]byte, size)
-		io.ReadFull(r, buf)
+		io.ReadFull(r, buf[4:size])
 		out := bson.D{}
 		bson.Unmarshal(buf, &out)
 		fmt.Println(out)
-		r.Seek(4, 0)
 	}
 }
 
