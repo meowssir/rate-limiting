@@ -56,15 +56,15 @@ func archiveReader(filename string) (q docQueue) {
 
 func main() {
 
+	// consumer queue and opcount manager
 	q := docQueue{}
 	q = archiveReader("dump")
 
-	fmt.Println(q.docs)
+	fmt.Println(q)
 
 	// n is the rate of inserts we want per second
 	n := 2
 
-	// queuing constructor and limit the number of exec per second.
 	url := "ssp13g3l:27017"
 	session, err := mgo.Dial(url)
 	if err != nil {
@@ -73,11 +73,9 @@ func main() {
 
 	result := []bson.D{}
 	c := session.DB("test").C("foo")
-	c.Find(bson.D{{}}).All(&result)
-	fmt.Println(result)
 
-	requests := make(chan int, 2)
-	for i := 1; i <= 2; i++ {
+	requests := make(chan int, q.opcount)
+	for i := 1; i < q.opcount; i++ {
 		requests <- i
 	}
 	close(requests)
@@ -88,6 +86,10 @@ func main() {
 
 	for req := range requests {
 		<-throttle // rate limit our inserts by blocking this channel.
-		fmt.Println("request", req, time.Now())
+		c.Insert(q.docs[req])
+		fmt.Println(req, time.Now())
 	}
+
+	c.Find(bson.D{{}}).All(&result)
+	fmt.Println(result)
 }
