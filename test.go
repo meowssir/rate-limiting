@@ -15,15 +15,21 @@ const (
 	MaxBSONSize = 16 * 1024 * 1024 // 16MB - maximum BSON document size
 )
 
-func archiveReader(filename string) {
+type docQueue struct {
+	opcount int
+	docs    []interface{}
+	idxs    []int
+}
+
+func archiveReader(filename string) (q docQueue) {
 	r, _ := os.Open(filename)
 	defer r.Close()
 
 	// skip 0x8199e26d
 	r.Seek(4, 0)
 	buf := make([]byte, MaxBSONSize)
-	out := bson.D{}
 
+	out := bson.D{}
 	for {
 		// read size bytes
 		n, err := io.ReadFull(r, buf[0:4])
@@ -41,25 +47,19 @@ func archiveReader(filename string) {
 		if size != -1 {
 			io.ReadFull(r, buf[4:size])
 			bson.Unmarshal(buf, &out)
-			fmt.Println(out)
+			q.docs = append(q.docs, out)
+			q.opcount++
 		}
 	}
+	return q
 }
 
 func main() {
 
-	archiveReader("dump")
-
-	_ = "breakpoint"
-	type docQueue struct {
-		opcount int
-		docs    []interface{}
-		idxs    []int
-	}
-
 	q := docQueue{}
-	q.opcount = 2
-	q.docs = append(q.docs, bson.D{{"a", 0}}, bson.D{{"a", 1}})
+	q = archiveReader("dump")
+
+	fmt.Println(q.docs)
 
 	// n is the rate of inserts we want per second
 	n := 2
@@ -75,10 +75,9 @@ func main() {
 	c := session.DB("test").C("foo")
 	c.Find(bson.D{{}}).All(&result)
 	fmt.Println(result)
-	fmt.Println(&q.docs)
 
-	requests := make(chan int, q.opcount)
-	for i := 1; i <= q.opcount; i++ {
+	requests := make(chan int, 2)
+	for i := 1; i <= 2; i++ {
 		requests <- i
 	}
 	close(requests)
