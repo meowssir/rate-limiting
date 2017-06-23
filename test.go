@@ -15,7 +15,7 @@ const (
 	MaxBSONSize = 16 * 1024 * 1024 // 16MB - maximum BSON document size
 )
 
-func archiveReader(filename string) int32 {
+func archiveReader(filename string) {
 	r, _ := os.Open(filename)
 
 	// skip 0x8199e26d
@@ -32,10 +32,12 @@ func archiveReader(filename string) int32 {
 				(uint32(buf[3]) << 24),
 		)
 
-		io.ReadFull(r, buf[4:size])
-		out := bson.D{}
-		bson.Unmarshal(buf, &out)
-		fmt.Println(out)
+		if size != -1 {
+			io.ReadFull(r, buf[4:size])
+			out := bson.D{}
+			bson.Unmarshal(buf, &out)
+			fmt.Println(&out)
+		}
 	}
 }
 
