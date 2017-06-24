@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"time"
 
+	"golang.org/x/time/rate"
 	mgo "gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
@@ -54,6 +57,26 @@ func archiveReader(filename string) (q docQueue) {
 	return q
 }
 
+func limiter(n, opcount int, docs []interface{}, intent *mgo.Collection) {
+	c := make(chan int, opcount)
+	go func() {
+		ctx := context.Background()
+		r := rate.Every(time.Second / time.Duration(n))
+		l := rate.NewLimiter(r, n)
+		for i := 0; i < opcount; i++ {
+			if err := l.Wait(ctx); err != nil {
+				log.Fatalln(err)
+			}
+			c <- i
+		}
+		close(c)
+	}()
+	for r := range c {
+		intent.Insert(docs[r])
+		fmt.Println(r, time.Now(), opcount)
+	}
+}
+
 func main() {
 
 	// consumer queue and opcount manager
@@ -61,6 +84,7 @@ func main() {
 	q = archiveReader("dump")
 
 	fmt.Println(q)
+	fmt.Println(len(q.docs))
 
 	// n is the rate of inserts we want per second
 	n := 2
@@ -74,21 +98,7 @@ func main() {
 	result := []bson.D{}
 	c := session.DB("test").C("foo")
 
-	requests := make(chan int, q.opcount)
-	for i := 1; i < q.opcount; i++ {
-		requests <- i
-	}
-	close(requests)
-
-	// The actual throttle is defined by the tick time in ms as L/n where n is some int specified.
-	// in the case of n being 2, the throttle is then 500ms.
-	throttle := time.Tick(time.Millisecond * time.Duration(1000/n))
-
-	for req := range requests {
-		<-throttle // rate limit our inserts by blocking this channel.
-		c.Insert(q.docs[req])
-		fmt.Println(req, time.Now())
-	}
+	limiter(n, q.opcount, q.docs, c)
 
 	c.Find(bson.D{{}}).All(&result)
 	fmt.Println(result)
