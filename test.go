@@ -58,13 +58,18 @@ func archiveReader(filename string) (q docQueue) {
 }
 
 func limiter(n, opcount int, docs []interface{}, intent *mgo.Collection) {
-	c := make(chan int, opcount)
+	// create a channel of an appropriate size for the operations.
+	// TODO: investigate the performance of channels.
+	c := make(chan int, 1000)
 	go func() {
+		// create a Background context for incoming requests. It is never canceled, has no values, and has no deadline.
 		ctx := context.Background()
+		// converts a minimum time interval between events to a Limit, in this case n being 2.
 		r := rate.Every(time.Second / time.Duration(n))
-		l := rate.NewLimiter(r, n)
+		// allows events up to rate r and permits bursts of at most b tokens. 1 will not allow for bursts.
+		l := rate.NewLimiter(r, 1)
 		for i := 0; i < opcount; i++ {
-			if err := l.Wait(ctx); err != nil {
+			if err := l.WaitN(ctx, 1); err != nil {
 				log.Fatalln(err)
 			}
 			c <- i
