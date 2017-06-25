@@ -67,6 +67,11 @@ func limiter(n, opcount int, docs []interface{}, intent *mgo.Collection) {
 		// converts a minimum time interval between events to a Limit, in this case n being 2.
 		r := rate.Every(time.Second / time.Duration(n))
 		// allows events up to rate r and permits bursts of at most b tokens. 1 will not allow for bursts.
+		// replace WaitN for a Wait and use the below formula for Burst size.
+		// Given the ability to update the token bucket every S milliseconds, the number of tokens to add every S milliseconds
+		// = (r*S)/1000.
+		// Let M be the maximum possible transmission rate in bytes/second.
+		// max(T) = b/(M-r) if r < M is the maximum burst time, that is the time for which the rate M is fully utilized.
 		l := rate.NewLimiter(r, 1)
 		for i := 0; i < opcount; i++ {
 			if err := l.WaitN(ctx, 1); err != nil {
