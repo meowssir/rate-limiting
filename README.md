@@ -12,9 +12,3 @@ The token bucket algorithm can be conceptually understood as follows:
 # Variations
 
 Implementers of this algorithm on platforms lacking the clock resolution necessary to add a single token to the bucket every 1/r seconds may want to consider an alternative formulation. Given the ability to update the token bucket every S milliseconds, the number of tokens to add every S milliseconds = (r*S)/1000.
-
-The formula for the burst size uses the possible transmission rate in bytes/second as an uppercound constraint which is then used to provide the max token burst rate, such that the bucket size is divided by a theoretical max trasmission rate minus the token rate for which we want to update the bucket.
-
-```
-max(T) = b/(M-r) if r < M, otherwize it will be infinity.
-```
