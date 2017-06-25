@@ -57,25 +57,22 @@ func archiveReader(filename string) (q docQueue) {
 	return q
 }
 
-func limiter(n, opcount int, docs []interface{}, intent *mgo.Collection) {
-	// create a channel of an appropriate size for the operations.
-	// TODO: investigate the performance of channels.
-	c := make(chan int, 1000)
+func limiter(r, b, opcount int, docs []interface{}, collection *mgo.Collection) {
+	c := make(chan int)
 	go func() {
 		// create a Background context for incoming requests. It is never canceled, has no values, and has no deadline.
 		ctx := context.Background()
 		// converts a minimum time interval between events to a Limit, in this case n being 2.
-		r := rate.Every(time.Second / time.Duration(n))
+		r := rate.Every(time.Second / time.Duration(r))
 		// allows events up to rate r and permits bursts of at most b tokens. 1 will not allow for bursts.
-		// replace WaitN for a Wait and use the below formula for Burst time and size.
 		// Given the ability to update the token bucket every S milliseconds, the number of tokens to add every S milliseconds
 		// = (r*S)/1000.
 		// Let M be the maximum possible transmission rate in bytes/second.
 		// max(T) = b/(M-r) if r < M is the maximum burst time, that is the time for which the rate M is fully utilized.
 		// max(B) = max(T)*M
-		l := rate.NewLimiter(r, 1)
+		l := rate.NewLimiter(r, b)
 		for i := 0; i < opcount; i++ {
-			if err := l.WaitN(ctx, 1); err != nil {
+			if err := l.Wait(ctx); err != nil {
 				log.Fatalln(err)
 			}
 			c <- i
@@ -83,7 +80,8 @@ func limiter(n, opcount int, docs []interface{}, intent *mgo.Collection) {
 		close(c)
 	}()
 	for r := range c {
-		intent.Insert(docs[r])
+		collection.Insert(docs[r])
+		opcount--
 		fmt.Println(r, time.Now(), opcount)
 	}
 }
@@ -97,8 +95,8 @@ func main() {
 	fmt.Println(q)
 	fmt.Println(len(q.docs))
 
-	// n is the rate of inserts we want per second
-	n := 2
+	// A token is added to the bucket every 1/r seconds.
+	r := 2
 
 	url := "ssp13g3l:27017"
 	session, err := mgo.Dial(url)
@@ -106,11 +104,15 @@ func main() {
 		panic(err)
 	}
 
-	result := []bson.D{}
+	// result := []bson.D{}
 	c := session.DB("test").C("foo")
 
-	limiter(n, q.opcount, q.docs, c)
+	// An arbitrary burst value, this should be a configurable option to allow the shaping of traffic
+	// to be adjusted by the user. An arbitrarily large bucket size would allow for the delta of blocked operations
+	// that occured for some interval and n tokens removed from the bucket and instantaneously be sent over the network.
+	// This may have an undesired effect and incur contention.
+	limiter(r, 10, q.opcount, q.docs, c)
 
-	c.Find(bson.D{{}}).All(&result)
-	fmt.Println(result)
+	// c.Find(bson.D{{}}).All(&result)
+	// fmt.Println(result)
 }
