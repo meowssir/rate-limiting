@@ -58,31 +58,31 @@ func archiveReader(filename string) (q docQueue) {
 }
 
 func limiter(r, b, opcount int, docs []interface{}, collection *mgo.Collection) {
-	c := make(chan int)
+	// if we buffer the channel to a value > 0 then the burst size will always be < b+(T*e).
+	// https://en.wikipedia.org/wiki/Token_bucket
+	c := make(chan int, 20)
 	go func() {
 		// create a Background context for incoming requests. It is never canceled, has no values, and has no deadline.
 		ctx := context.Background()
 		// converts a minimum time interval between events to a Limit, in this case n being 2.
 		r := rate.Every(time.Second / time.Duration(r))
-		// allows events up to rate r and permits bursts of at most b tokens. 1 will not allow for bursts.
-		// Given the ability to update the token bucket every S milliseconds, the number of tokens to add every S milliseconds
-		// = (r*S)/1000.
-		// Let M be the maximum possible transmission rate in bytes/second.
-		// max(T) = b/(M-r) if r < M is the maximum burst time, that is the time for which the rate M is fully utilized.
-		// max(B) = max(T)*M
+		// allows events up to rate r and permits bursts of at most b tokens.
 		l := rate.NewLimiter(r, b)
 		for i := 0; i < opcount; i++ {
+			// If no token is available, Wait blocks until one can be obtained.
 			if err := l.Wait(ctx); err != nil {
 				log.Fatalln(err)
 			}
+			// send to channel when Wait unblocks and a token is made available.
 			c <- i
 		}
 		close(c)
 	}()
+	op := opcount
 	for r := range c {
+		op--
 		collection.Insert(docs[r])
-		opcount--
-		fmt.Println(r, time.Now(), opcount)
+		fmt.Println(r, time.Now(), op)
 	}
 }
 
@@ -96,7 +96,7 @@ func main() {
 	fmt.Println(len(q.docs))
 
 	// A token is added to the bucket every 1/r seconds.
-	r := 2
+	r := 4
 
 	url := "ssp13g3l:27017"
 	session, err := mgo.Dial(url)
@@ -104,15 +104,12 @@ func main() {
 		panic(err)
 	}
 
-	// result := []bson.D{}
+	result := []bson.D{}
 	c := session.DB("test").C("foo")
 
-	// An arbitrary burst value, this should be a configurable option to allow the shaping of traffic
-	// to be adjusted by the user. An arbitrarily large bucket size would allow for the delta of blocked operations
-	// that occured for some interval and n tokens removed from the bucket and instantaneously be sent over the network.
-	// This may have an undesired effect and incur contention.
-	limiter(r, 10, q.opcount, q.docs, c)
+	// burst should be a configurable option based on what the user deems appropriate for policing rates.
+	limiter(r, 5, q.opcount, q.docs, c)
 
-	// c.Find(bson.D{{}}).All(&result)
-	// fmt.Println(result)
+	c.Find(bson.D{{}}).All(&result)
+	fmt.Println(result)
 }
