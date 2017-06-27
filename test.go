@@ -58,9 +58,9 @@ func archiveReader(filename string) (q docQueue) {
 }
 
 func limiter(r, b, opcount int, docs []interface{}, collection *mgo.Collection) {
-	// if we buffer the channel to a value > 0 then the burst size will always be < b+(T*e).
+	// if we buffer the channel to a value > 0 then the burst size will be the tokens accumulated in the channel + b+(T*r).
 	// https://en.wikipedia.org/wiki/Token_bucket
-	c := make(chan int, 20)
+	c := make(chan int)
 	go func() {
 		// create a Background context for incoming requests. It is never canceled, has no values, and has no deadline.
 		ctx := context.Background()
@@ -88,7 +88,7 @@ func limiter(r, b, opcount int, docs []interface{}, collection *mgo.Collection) 
 
 func main() {
 
-	// consumer queue and opcount manager
+	// Consumer queue and opcount manager.
 	q := docQueue{}
 	q = archiveReader("dump")
 
@@ -96,7 +96,7 @@ func main() {
 	fmt.Println(len(q.docs))
 
 	// A token is added to the bucket every 1/r seconds.
-	r := 4
+	r := 2
 
 	url := "ssp13g3l:27017"
 	session, err := mgo.Dial(url)
